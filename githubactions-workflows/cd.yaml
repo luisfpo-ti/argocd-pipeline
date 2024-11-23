@@ -1,0 +1,46 @@
+#This template is used to run kustomize command and commit the changes to the gitops repository
+name: Update GitOps files
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        required: true
+        type: string
+      env_folder:
+        required: true
+        type: string
+      docker_tag_argocd:
+        required: true
+        type: string
+    secrets:
+      GIT_TOKEN:
+        required: true
+
+jobs:
+  update-gitops:
+    name: Run Kustomize
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
+
+      - name: Update kustomization
+        run: |
+          ls -l
+          cd gitops/${{ inputs.app_name }}/overlays/${{ inputs.env_folder }}
+          kustomize edit set image IMAGE=${{ inputs.docker_tag_argocd }}
+          kustomize build .
+          cd ../../..
+          git config --global user.name 'GitOps'
+          git config --global user.email 'your_git@email.com'
+          git add .
+          git commit -m "Update image tag to app ${{ inputs.app_name }} with tag: ${{ inputs.docker_tag_argocd }}"
+          git push origin HEAD
+        env:
+          GITHUB_PERSONAL_TOKEN: ${{ secrets.GIT_TOKEN }}

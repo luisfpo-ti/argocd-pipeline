@@ -1,0 +1,106 @@
+name: Execute jobs build/deploy
+on:
+  workflow_call:
+    inputs:
+      docker_repository_name:
+        required: true
+        type: string
+      docker_tag:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true        
+      GIT_TOKEN:
+        required: true
+
+jobs:
+  generate-tag:
+    needs: build-jar
+    name: Generate Tag
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Bump version and push tag
+      id: auto_tag
+      uses: anothrNick/github-tag-action@1.71.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        RELEASE_BRANCHES: release/prod
+        DEFAULT_BUMP: patch
+
+    - name: Generate Docker tag
+      id: generate_docker_tag
+      run: |
+        if [[ "${{ inputs.docker_tag }}" == "stg" ]]; then
+          echo "DOCKER_TAG=${{ inputs.docker_repository_name }}/${{ github.event.repository.name }}:${{inputs.docker_tag}}-${{steps.auto_tag.outputs.new_tag}}" >> $GITHUB_OUTPUT
+        fi
+        if [[ "${{ inputs.docker_tag }}" == "prod" ]]; then
+          echo "DOCKER_TAG=${{ inputs.docker_repository_name }}/${{ github.event.repository.name }}:${{inputs.docker_tag}}-${{steps.auto_tag.outputs.new_tag}}" >> $GITHUB_OUTPUT
+        fi
+    outputs:
+      DOCKER_TAG: ${{ steps.generate_docker_tag.outputs.DOCKER_TAG }}
+
+  build-jar:
+    name: Checkout
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+    
+    - name: Build .jar
+      run: ./gradlew build
+    
+    - name: Upload artefato
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifact
+        path: build/libs/
+
+  docker-build:
+    name: Image Docker Build
+    needs: generate-tag
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download artefato
+      uses: actions/download-artifact@v4
+      with:
+        name: artifact
+        path: build/libs/
+
+    - name: docker image build
+      run: docker build . --file Dockerfile  --tag ${{ needs.generate-tag.outputs.DOCKER_TAG }}
+
+    - name: login docker hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Push image to Docker Hub
+      run: docker push ${{ needs.generate-tag.outputs.DOCKER_TAG }}
+
+  update-argocd:
+    name: Update ArgoCD
+    needs: [docker-build, generate-tag]
+    uses: .github/workflows/cd.yaml@main
+    with:
+      app_name: ${{ inputs.app_name }}
+      env_folder:  ${{ inputs.docker_tag }}
+      docker_tag_argocd: ${{ needs.generate-tag.outputs.DOCKER_TAG }}
+    secrets:
+      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+
+

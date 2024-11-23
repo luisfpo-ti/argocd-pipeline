@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-name
+spec:
+  template:
+    spec:
+      containers:
+      - name: ms-name
+        resources:
+          limits:
+            cpu: 400m
+            memory: 900Mi
+          requests:
+            cpu: 100m
+            memory: 150Mi
+        env:
+          - name: ENV
+            value: "prod"
+         

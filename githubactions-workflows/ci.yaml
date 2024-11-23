@@ -1,0 +1,23 @@
+# This workflow is used in a microservice repository, it is responsible for building the image and pushing it to the registry.
+name: Build Image
+on:
+  pull_request:
+    types:
+      - closed
+    branches: [ 
+      "main",
+      "staging"
+    ]
+  workflow_dispatch:
+
+jobs:
+  build-deploy:
+    uses: .github/workflows/cicd-java.yaml@main
+    with:
+      docker_tag: ${{ github.ref == 'refs/heads/staging' && 'stg' || github.ref == 'refs/heads/main' && 'prod' || 'stg' }}
+      app_name: "ms-name"
+      docker_repository_name: ${{ vars.REGISTRY_NAME }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      GIT_TOKEN: ${{ secrets.GIT_PERSONAL_TOKEN }}

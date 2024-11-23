@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    # Sento notification to slack tgo channel deploy notifications
+    notifications.argoproj.io/subscribe.on-deployed.slack: deploy-notifications
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: deploy-notifications
+    notifications.argoproj.io/subscribe.on-sync-running.slack: deploy-notifications
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: deploy-notifications
+  name: ms-name
+  namespace: argocd
+spec:
+  destination:
+    namespace: stg-workloads
+    server: https://kubernetes.default.svc
+  project: stg-workloads
+  source:
+    path: microservice-example/overlays/stg
+    repoURL: git@github.com:luisfpo-ti/argocd-pipeline.git
+    targetRevision: staging
+  syncPolicy:
+    automated: {}
+    syncOptions:
+      - CreateNamespace=true
+      - Replace=true
